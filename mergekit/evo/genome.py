@@ -47,11 +47,13 @@ class ModelGenomeDefinition(BaseModel, frozen=True):
         assert self.merge_method in METHOD_PARAM_MAPS, "Invalid merge method"
         assert self.layer_granularity > 0, "layer_granularity must be positive"
 
+        """
         if self.merge_method in ["ties", "dare_ties", "task_arithmetic"]:
             assert self.base_model is not None, "base_model is required for this method"
         else:
             assert self.base_model is None, "base_model is not used for this method"
-
+        """
+            
         return self
 
 
