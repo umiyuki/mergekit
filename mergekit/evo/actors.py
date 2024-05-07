@@ -108,6 +108,7 @@ class OnDiskMergeEvaluator(MergeActorBase):
             num_fewshot=self.config.num_fewshot,
             limit=self.config.limit,
             vllm=self.vllm,
+            load_in_4bit=self.config.load_in_4bit,
             batch_size=self.batch_size,
             task_manager=self.task_manager,
         )

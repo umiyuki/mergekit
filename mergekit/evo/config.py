@@ -40,7 +40,7 @@ class EvolMergeConfiguration(BaseModel, frozen=True):
     num_fewshot: Optional[int] = None
     shuffle: bool = False
     random_init: bool = False
-
+    load_in_4bit: bool = False
 
 NAUGHTY_PREFIXES = [
     "mmlu",
