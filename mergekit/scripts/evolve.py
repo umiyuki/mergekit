@@ -26,6 +26,9 @@ import torch
 import tqdm
 import transformers
 import yaml
+import pickle
+import csv
+import datetime
 
 try:
     import wandb
@@ -107,6 +110,8 @@ from mergekit.options import MergeOptions
     default=True,
     help="Convert models to single-shard safetensors for faster merge",
 )
+@click.option("--continue-optimization", is_flag=True, default=False, help="Continue optimization from the previous state")
+@click.option("--ftarget", type=float, default=np.inf, help="Target function value. Stop if this value is reached.")
 def main(
     genome_config_path: str,
     max_fevals: int,
@@ -128,6 +133,8 @@ def main(
     allow_benchmark_tasks: bool,
     save_final_model: bool,
     reshard: bool,
+    continue_optimization: bool,
+    ftarget: float,
 ):
     config = EvolMergeConfiguration.model_validate(
         yaml.safe_load(open(genome_config_path, "r", encoding="utf-8"))
@@ -224,7 +231,15 @@ def main(
         task_search_path=task_search_path,
     )
 
-    x0 = genome.initial_genotype(random=config.random_init).view(-1).numpy()
+    #前回のCMAの状態をロードする
+    cma_state_path = os.path.join(storage_path, "cma_state.pkl")
+    if continue_optimization and os.path.exists(cma_state_path):
+        with open(cma_state_path, "rb") as f:
+            es = pickle.load(f)
+        x0 = es.result.xfavorite  # 前回の最適解をx0として使用
+    else:
+        #初期遺伝子型を生成し、CMA-ESを使用して最適化を実行します。
+        x0 = genome.initial_genotype(random=config.random_init).view(-1).numpy()
     xbest = x0
     xbest_cost = np.inf
 
@@ -261,6 +276,13 @@ def main(
                 art.add_file(os.path.join(storage_path, "best_config.yaml"))
                 run.log_artifact(art)
 
+            # CSVファイルに記録
+            with open(os.path.join(storage_path, "best_scores.csv"), "a", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow([datetime.datetime.now(), -xbest_cost, best_yaml])
+
+    #複数の遺伝子型を並列に評価するための関数です。
+    #指定された評価戦略を使用して遺伝子型を評価します。
     def parallel_evaluate(x: List[np.ndarray]) -> List[float]:
         print(f"Received {len(x)} genotypes")
         res = strat.evaluate_genotypes(x)
@@ -309,13 +331,21 @@ def main(
             parallel_objective=parallel_evaluate,
             x0=x0,
             sigma0=sigma0,
-            options={"maxfevals": max_fevals},
+            options={
+                "maxfevals": max_fevals,
+                "ftarget": -ftarget,  # 目標関数値を指定
+                },
             callback=progress_callback,
         )
         xbest_cost = es.result.fbest
     except KeyboardInterrupt:
         ray.shutdown()
 
+    # 最適化の状態を保存
+    with open(os.path.join(storage_path, "cma_state.pkl"), "wb") as f:
+        f.write(es.pickle_dumps())
+
+    #最適化が完了したら、最良のマージ設定をYAML形式で出力します。
     print("!!! OPTIMIZATION COMPLETE !!!")
     print(f"Best cost: {xbest_cost:.4f}")
     print()
