@@ -159,8 +159,10 @@ def main(
         read_to_gpu=merge_cuda and not in_memory,
         copy_tokenizer=True,
         safe_serialization=True,
+        lazy_unpickle=True,
     )
 
+    #モデルを単一シャードのsafetensors形式に変換します。
     # convert models to single-shard safetensors
     if reshard:
         resharded_models = []
