@@ -233,10 +233,16 @@ def main(
 
     #前回のCMAの状態をロードする
     cma_state_path = os.path.join(storage_path, "cma_state.pkl")
-    if continue_optimization and os.path.exists(cma_state_path):
-        with open(cma_state_path, "rb") as f:
-            es = pickle.load(f)
-        x0 = es.result.xfavorite  # 前回の最適解をx0として使用
+    if continue_optimization:
+        if os.path.exists(cma_state_path):
+            with open(cma_state_path, "rb") as f:
+                print("保存されているcma_state.pklを見つけました。前回の続きから最適化を継続します。")
+                es = pickle.load(f)
+            x0 = es.result.xfavorite  # 前回の最適解をx0として使用
+        else:
+            print("--continue-optimizationオプションが有効ですが、cma_state.pklが存在しません。最初から最適化を開始します。")
+             #初期遺伝子型を生成し、CMA-ESを使用して最適化を実行します。
+            x0 = genome.initial_genotype(random=config.random_init).view(-1).numpy()
     else:
         #初期遺伝子型を生成し、CMA-ESを使用して最適化を実行します。
         x0 = genome.initial_genotype(random=config.random_init).view(-1).numpy()
