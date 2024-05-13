@@ -50,7 +50,7 @@ from mergekit.evo.strategy import (
 )
 from mergekit.merge import run_merge
 from mergekit.options import MergeOptions
-
+import shutil
 
 @click.command("mergekit-evolve")
 @click.argument("genome-config-path", type=str)
@@ -112,6 +112,7 @@ from mergekit.options import MergeOptions
 )
 @click.option("--continue-optimization", is_flag=True, default=False, help="Continue optimization from the previous state")
 @click.option("--ftarget", type=float, default=np.inf, help="Target function value. Stop if this value is reached.")
+@click.option("--save-results", type=str, default=None, help="Directory name to save the results under storage_path/results/")
 def main(
     genome_config_path: str,
     max_fevals: int,
@@ -135,12 +136,18 @@ def main(
     reshard: bool,
     continue_optimization: bool,
     ftarget: float,
+    save_results: Optional[str]
 ):
     config = EvolMergeConfiguration.model_validate(
         yaml.safe_load(open(genome_config_path, "r", encoding="utf-8"))
     )
 
     check_for_naughty_config(config, allow=allow_benchmark_tasks)
+
+    #best_config.csvがあれば削除
+    best_config_path = os.path.join(storage_path, "best_config.yaml")
+    if os.path.isfile(best_config):
+        os.remove(best_config_path)
 
     if use_wandb:
         if not wandb:
@@ -282,10 +289,10 @@ def main(
                 art.add_file(os.path.join(storage_path, "best_config.yaml"))
                 run.log_artifact(art)
 
-            # CSVファイルに記録
-            with open(os.path.join(storage_path, "best_scores.csv"), "a", newline="") as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow([datetime.datetime.now(), -xbest_cost, best_yaml])
+        # CSVファイルに記録
+        with open(os.path.join(storage_path, "best_scores.csv"), "a", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow([datetime.datetime.now(), -xbest_cost, best_yaml])
 
     #複数の遺伝子型を並列に評価するための関数です。
     #指定された評価戦略を使用して遺伝子型を評価します。
@@ -365,6 +372,36 @@ def main(
     if save_final_model:
         print("Saving final model...")
         run_merge(best_config, os.path.join(storage_path, "final_model"), merge_options)
+    
+    if save_results is not None:
+        results_dir = os.path.join(storage_path, "results", save_results)
+        os.makedirs(results_dir, exist_ok=True)
+
+        # Move best_config.yaml
+        src_config = os.path.join(storage_path, "best_config.yaml")
+        dst_config = os.path.join(results_dir, "best_config.yaml")
+        if os.path.isfile(src_config):
+            shutil.copy(src_config, dst_config)
+
+        # Move best_scores.csv
+        src_scores = os.path.join(storage_path, "best_scores.csv")
+        dst_scores = os.path.join(results_dir, "best_scores.csv")
+        if os.path.isfile(src_scores):
+            shutil.copy(src_scores, dst_scores)
+
+        # Move cma_state.pkl
+        src_state = os.path.join(storage_path, "cma_state.pkl")
+        dst_state = os.path.join(results_dir, "cma_state.pkl")
+        if os.path.isfile(src_state):
+            shutil.copy(src_state, dst_state)
+
+        # Copy genome_config_path YAML file
+        genome_config_name = os.path.basename(genome_config_path)
+        dst_genome_config = os.path.join(results_dir, genome_config_name)
+        if os.path.isfile(genome_config_path):
+            shutil.copy(genome_config_path, dst_genome_config)
+
+        print(f"Results saved to {results_dir}")
 
 
 def _reshard_model(
