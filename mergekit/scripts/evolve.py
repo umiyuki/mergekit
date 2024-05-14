@@ -138,6 +138,8 @@ def main(
     ftarget: float,
     save_results: Optional[str]
 ):
+    last_es = None  # last_esを初期化
+
     config = EvolMergeConfiguration.model_validate(
         yaml.safe_load(open(genome_config_path, "r", encoding="utf-8"))
     )
@@ -146,7 +148,7 @@ def main(
 
     #best_config.csvがあれば削除
     best_config_path = os.path.join(storage_path, "best_config.yaml")
-    if os.path.isfile(best_config):
+    if os.path.isfile(best_config_path):
         os.remove(best_config_path)
 
     if use_wandb:
@@ -257,7 +259,8 @@ def main(
     xbest_cost = np.inf
 
     def progress_callback(es: cma.CMAEvolutionStrategy):
-        nonlocal xbest, xbest_cost
+        nonlocal xbest, xbest_cost, last_es
+        last_es = es
 
         res = es.result
         if use_wandb:
@@ -275,6 +278,7 @@ def main(
                 step=res.evaluations,
             )
 
+        
         if res.fbest < xbest_cost:
             xbest = res.xbest
             xbest_cost = res.fbest
@@ -288,11 +292,13 @@ def main(
                 art = wandb.Artifact("best_config", type="merge_config")
                 art.add_file(os.path.join(storage_path, "best_config.yaml"))
                 run.log_artifact(art)
+        else:
+            best_yaml = genome.genotype_merge_config(res.xbest).to_yaml()
 
         # CSVファイルに記録
         with open(os.path.join(storage_path, "best_scores.csv"), "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow([datetime.datetime.now(), -xbest_cost, best_yaml])
+            writer.writerow([datetime.datetime.now(), -res.fbest, best_yaml])
 
     #複数の遺伝子型を並列に評価するための関数です。
     #指定された評価戦略を使用して遺伝子型を評価します。
@@ -351,12 +357,14 @@ def main(
             callback=progress_callback,
         )
         xbest_cost = es.result.fbest
+        last_es = es
     except KeyboardInterrupt:
         ray.shutdown()
 
     # 最適化の状態を保存
-    with open(os.path.join(storage_path, "cma_state.pkl"), "wb") as f:
-        f.write(es.pickle_dumps())
+    if last_es is not None:
+        with open(os.path.join(storage_path, "cma_state.pkl"), "wb") as f:
+            f.write(es.pickle_dumps())
 
     #最適化が完了したら、最良のマージ設定をYAML形式で出力します。
     print("!!! OPTIMIZATION COMPLETE !!!")
