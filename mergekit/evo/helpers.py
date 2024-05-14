@@ -66,6 +66,7 @@ def evaluate_model(
     limit: Optional[int],
     vllm: bool,
     load_in_4bit: bool,
+    load_in_8bit: bool,
     batch_size: Optional[int] = None,
     task_manager: Optional[lm_eval.tasks.TaskManager] = None,
 ) -> float:
@@ -85,6 +86,8 @@ def evaluate_model(
             model_args["use_cache"] = True
             if load_in_4bit:
                 model_args["load_in_4bit"] = True
+            elif load_in_8bit:
+                model_args["load_in_8bit"] = True
 
         res = _eval_model(
             "vllm" if vllm else "huggingface",

@@ -41,6 +41,7 @@ class EvolMergeConfiguration(BaseModel, frozen=True):
     shuffle: bool = False
     random_init: bool = False
     load_in_4bit: bool = False
+    load_in_8bit: bool = False
 
 NAUGHTY_PREFIXES = [
     "mmlu",
