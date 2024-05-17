@@ -145,6 +145,7 @@ def main(
     )
 
     check_for_naughty_config(config, allow=allow_benchmark_tasks)
+    print("マージ対象モデル:" + str( [model.model.path for model in config.genome.models]))
 
     #best_config.csvがあれば削除
     best_config_path = os.path.join(storage_path, "best_config.yaml")
